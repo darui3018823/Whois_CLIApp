@@ -11,6 +11,9 @@ import (
 )
 
 var rawFlag = flag.Bool("raw", false, "Output raw whois text")
+var versionFlag = flag.Bool("version", false, "Show version information")
+var helpFlag = flag.Bool("help", false, "Show help message")
+var outFile = flag.String("o", "", "Output to file")
 
 type Config struct {
 	Lang       string `json:"lang"`
@@ -87,6 +90,17 @@ func getWhoisServer(domain string) string {
 }
 
 func main() {
+	if *versionFlag {
+		fmt.Println("WhoisCLIApp v1.0.0")
+		return
+	}
+
+	if *helpFlag {
+		fmt.Println("Usage: whoiscli [options] <domain>")
+		flag.PrintDefaults()
+		return
+	}
+
 	flag.Parse()
 	args := flag.Args()
 
@@ -98,6 +112,10 @@ func main() {
 
 	config := loadConfig("config.json")
 	useRaw := *rawFlag || config.DefaultRaw
+
+	if *outFile != "" {
+		config.Color = false
+	}
 
 	server := getWhoisServer(domain)
 
@@ -112,27 +130,40 @@ func main() {
 
 	scanner := bufio.NewScanner(conn)
 
+	var outputLines []string
+
 	if useRaw {
 		for scanner.Scan() {
-			fmt.Println(scanner.Text())
+			outputLines = append(outputLines, scanner.Text())
 		}
-		return
-	}
-
-	// 整形出力
-	for scanner.Scan() {
-		line := scanner.Text()
-		for key := range labels {
-			if strings.HasPrefix(line, key) {
-				parts := strings.SplitN(line, ":", 2)
-				if len(parts) == 2 {
-					label := translateLabel(strings.TrimSpace(parts[0]), config.Lang)
-					value := strings.TrimSpace(parts[1])
-					fmt.Printf("%s: %s\n",
-						colorize(label, "label", config.Color),
-						colorize(value, "value", config.Color))
+	} else {
+		for scanner.Scan() {
+			line := scanner.Text()
+			for key := range labels {
+				if strings.Contains(line, key) {
+					parts := strings.SplitN(line, ":", 2)
+					if len(parts) == 2 {
+						label := translateLabel(strings.TrimSpace(parts[0]), config.Lang)
+						value := strings.TrimSpace(parts[1])
+						formatted := fmt.Sprintf("%s: %s",
+							colorize(label, "label", config.Color),
+							colorize(value, "value", config.Color))
+						outputLines = append(outputLines, formatted)
+					}
 				}
 			}
+		}
+	}
+
+	if *outFile != "" {
+		err := os.WriteFile(*outFile, []byte(strings.Join(outputLines, "\n")+"\n"), 0644)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to write to file:", err)
+			os.Exit(1)
+		}
+	} else {
+		for _, line := range outputLines {
+			fmt.Println(line)
 		}
 	}
 }
