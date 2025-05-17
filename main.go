@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -14,7 +15,7 @@ func main() {
 	}
 
 	domain := os.Args[1]
-	server := "whois.verisign-grs.com:43" // .com/.net ドメイン向け
+	server := getWhoisServer(domain)
 
 	conn, err := net.Dial("tcp", server)
 	if err != nil {
@@ -28,5 +29,16 @@ func main() {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		fmt.Println(scanner.Text())
+	}
+}
+
+func getWhoisServer(domain string) string {
+	switch {
+	case strings.HasSuffix(domain, ".jp"):
+		return "whois.jprs.jp:43"
+	case strings.HasSuffix(domain, ".com"), strings.HasSuffix(domain, ".net"):
+		return "whois.verisign-grs.com:43"
+	default:
+		return "whois.iana.org:43"
 	}
 }
